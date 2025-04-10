@@ -1,6 +1,9 @@
 import { Application, Container, Graphics, Sprite, Texture,Rectangle } from "pixi.js";
 import { Viewport } from 'pixi-viewport'
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  Variables globales
+
 const CELL_SIZE = 10;
 
 let root = document.getElementById("simulador");
@@ -12,23 +15,28 @@ let btnCells;
 let tam;
 let col=0xFFFFFF;
 
+// Iteraciones de la cuadricula, indicador del paso actual
 let history=[];
 let ind = 0;
+
 
 let cellGraph = new Graphics()
                   .setFillStyle({ color: 'white',alpha:.4 })
                   .rect(0, 0, 1, 1)
                   .fill()
-                  .stroke({ color: 0xffffff, pixelLine: true });;
-
+                  .stroke({ color: 0xffffff, pixelLine: true });
 let cellContext;
 
+// Textura de las celulas pre-creada para aumentar eficiencia
 const baseTexture = Texture.WHITE;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  Funciones para el simulador (acciones, funcionalidades)
+
+// onClick de cada celula
 function onTap(){
   history[history.length-1][this.i][this.j]=cells[this.i][this.j].visible=!cells[this.i][this.j].visible;
 }
-
 
 function buildGrid(graphics, cols, rows){
   graphics.clear();
@@ -112,6 +120,95 @@ function buildCells(conCells,cols,rows){
 
 }
 
+// Aparecer o desaparecer celulas de acuerdo a la iteracion actual
+function actualizarCelulas(){
+  for(let i = 0;i<tam;i++){
+    for(let j=0;j<tam;j++){
+        cells[i][j].visible=history[ind][i][j];
+    }
+  }
+}
+
+// Cambiar color de las celulas
+function cambiarColor(color){
+  for(let i = 0;i<tam;i++){
+    for(let j=0;j<tam;j++){
+        cells[i][j].tint=color;
+    }
+  }
+}
+
+// Generar siguiente iteracion
+function siguienteIteracion(history, tam) {
+  // Obtener la última matriz de la historia (la matriz actual)
+  const matriz = history[history.length - 1];
+
+  let siguienteMatriz = Array.from({ length: tam }, () => Array(tam).fill(0));
+
+  // Función para contar los vecinos vivos de una celda
+  function contarVecinosVivos(fila, col) {
+      let contador = 0;
+      // Verificar las 8 direcciones alrededor de la celda (esquinas incluidas)
+      for (let i = -1; i <= 1; i++) {
+          for (let j = -1; j <= 1; j++) {
+              if (i === 0 && j === 0) continue; // No contar la propia celda
+              const nuevaFila = fila + i;
+              const nuevaCol = col + j;
+              if (nuevaFila >= 0 && nuevaFila < tam && nuevaCol >= 0 && nuevaCol < tam) {
+                  if (matriz[nuevaCol][nuevaFila] === true) {
+                      contador++;
+                  }
+              }
+          }
+      }
+      return contador;
+  }
+
+  // Recorrer cada celda de la matriz actual y calcular su siguiente estado
+  for (let col = 0; col < tam; col++) {
+    for (let fila = 0; fila < tam; fila++) {
+          const vecinosVivos = contarVecinosVivos(fila, col);
+          
+          // Si la celda es viva
+          if (matriz[col][fila] === 1) {
+              // La celda sobrevive si tiene 2 o 3 vecinos vivos
+              if (vecinosVivos === 2 || vecinosVivos === 3) {
+                  siguienteMatriz[col][fila] = true;
+              } else {
+                  siguienteMatriz[col][fila] = false;
+              }
+          } 
+          // Si la celda está muerta
+          else {
+              // La celda revive si tiene exactamente 3 vecinos vivos
+              if (vecinosVivos === 3) {
+                  siguienteMatriz[col][fila] = true;
+              }
+          }
+      }
+  }
+
+  history.push(siguienteMatriz);
+
+  ind++;
+  return siguienteMatriz;
+}
+
+function reiniciarSimulador(){
+  buildGrid(grid, tam, tam);
+  buildCells(conCells,tam,tam);
+
+  simulador.x=root.clientWidth/2;
+  simulador.y=root.clientHeight/2;
+  
+  simulador.pivot.x= simulador.width/2;
+  simulador.pivot.y= simulador.height/2;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  Inicializacion del simulador
+
 (async () => {
     const app = new Application();
     globalThis.__PIXI_APP__ = app;
@@ -174,16 +271,9 @@ viewport.drag().wheel();
   root.appendChild(app.canvas);
 })();
 
-function reiniciarSimulador(){
-  buildGrid(grid, tam, tam);
-  buildCells(conCells,tam,tam);
 
-  simulador.x=root.clientWidth/2;
-  simulador.y=root.clientHeight/2;
-  
-  simulador.pivot.x= simulador.width/2;
-  simulador.pivot.y= simulador.height/2;
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+//  Listeners
 
 document.getElementById("num").addEventListener('change', (e) => {
   tam = parseInt(e.target.value);;
@@ -191,117 +281,42 @@ document.getElementById("num").addEventListener('change', (e) => {
   reiniciarSimulador();
 });
 
-function siguienteIteracion(history, tam) {
-  // Obtener la última matriz de la historia (la matriz actual)
-  const matriz = history[history.length - 1];
-
-  // Crear una nueva matriz vacía para la siguiente iteración
-  let siguienteMatriz = Array.from({ length: tam }, () => Array(tam).fill(0));
-
-  // Función para contar los vecinos vivos de una celda
-  function contarVecinosVivos(fila, col) {
-      let contador = 0;
-      // Verificar las 8 direcciones alrededor de la celda (esquinas incluidas)
-      for (let i = -1; i <= 1; i++) {
-          for (let j = -1; j <= 1; j++) {
-              if (i === 0 && j === 0) continue; // No contar la propia celda
-              const nuevaFila = fila + i;
-              const nuevaCol = col + j;
-              if (nuevaFila >= 0 && nuevaFila < tam && nuevaCol >= 0 && nuevaCol < tam) {
-                  if (matriz[nuevaCol][nuevaFila] === true) {
-                      contador++;
-                  }
-              }
-          }
-      }
-      return contador;
-  }
-
-  // Recorrer cada celda de la matriz actual y calcular su siguiente estado
-  for (let col = 0; col < tam; col++) {
-    for (let fila = 0; fila < tam; fila++) {
-          const vecinosVivos = contarVecinosVivos(fila, col);
-          
-          // Si la celda es viva
-          if (matriz[col][fila] === 1) {
-              // La celda sobrevive si tiene 2 o 3 vecinos vivos
-              if (vecinosVivos === 2 || vecinosVivos === 3) {
-                  siguienteMatriz[col][fila] = true;
-              } else {
-                  siguienteMatriz[col][fila] = false;
-              }
-          } 
-          // Si la celda está muerta
-          else {
-              // La celda revive si tiene exactamente 3 vecinos vivos
-              if (vecinosVivos === 3) {
-                  siguienteMatriz[col][fila] = true;
-              }
-          }
-      }
-  }
-
-  // Agregar la nueva iteración a la historia
-  history.push(siguienteMatriz);
-
-  ind++;
-  // Retornar la nueva iteración para su visualización o uso posterior
-  return siguienteMatriz;
-}
-
-function actualizarCelulas(){
-  for(let i = 0;i<tam;i++){
-    for(let j=0;j<tam;j++){
-        cells[i][j].visible=history[ind][i][j];
-    }
-  }
-}
-
-function cambiarColor(color){
-  for(let i = 0;i<tam;i++){
-    for(let j=0;j<tam;j++){
-        cells[i][j].tint=color;
-    }
-  }
-}
 
 document.getElementById("colorAlive").addEventListener("change", function() {
-  console.log("🧹 Color cambiado.");
+  console.log("Color cambiado.");
   let nuevo = parseInt(this.value.substring(1),16);
 
   cambiarColor(nuevo);
   col=nuevo;
 
-  // Aquí limpias el grid de células
 });
 
 // Paso único
 document.getElementById("stepBtn").addEventListener("click", function() {
-  console.log("➡️ Iteración paso a paso ejecutada.");
+  console.log("Iteración paso a paso ejecutada.");
   siguienteIteracion(history,tam);
   
   actualizarCelulas();
 
-  // Aquí llamas a la función que ejecuta un paso
 });
 
 let intervalId = null;
 
 // Iniciar simulación continua
 document.getElementById("playBtn").addEventListener("click", function() {
-  console.log("▶️ Simulación iniciada.");
+  console.log("▶Simulación iniciada.");
   if (!intervalId) { // Si no se está ejecutando ya
     intervalId = setInterval(() => {
       siguienteIteracion(history,tam);
       actualizarCelulas();
-    }, 200); // 200 ms por generación (ajustable)
+    }, 200); // 200 ms por generación
     console.log("Simulación iniciada.");
   }
 });
 
 // Detener simulación
 document.getElementById("stopBtn").addEventListener("click", function() {
-  console.log("⏹️ Simulación detenida.");
+  console.log("⏹Simulación detenida.");
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
@@ -311,23 +326,20 @@ document.getElementById("stopBtn").addEventListener("click", function() {
 
 // Limpiar espacio celular
 document.getElementById("clearBtn").addEventListener("click", function() {
-  console.log("🧹 Espacio limpiado.");
+  console.log("Espacio limpiado.");
   reiniciarSimulador();
-  // Aquí limpias el grid de células
 });
 
 // Guardar configuración
 document.getElementById("saveBtn").addEventListener("click", function() {
-  console.log("💾 Guardando configuración.");
-  // Aquí generas un archivo con el estado actual
+  console.log("Guardando configuración.");
 });
 
 // Cargar archivo
 /*document.getElementById("load").addEventListener("change", function(event) {
   const file = event.target.files[0];
   if (file) {
-    console.log("📂 Archivo seleccionado:", file.name);
-    // Aquí puedes leer el archivo con FileReader
+    console.log("Archivo seleccionado:", file.name);
   }
 });*/
 
