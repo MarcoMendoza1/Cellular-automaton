@@ -10,11 +10,24 @@
 
 <body>
     <div id="root">
-        <header>
-            <div class="header-left" style="display: block; width: 100%;">
-              <h1>Simulador Life 2D</h1>
+        <header class="header" id="header">
+            <div class="header-left" style="display: flex; width: 100%; margin-bottom: 10px;">
+                <h1>Simulador Life 2D</h1>
+                <div style="margin-left: auto; display: flex;">
+                  <!-- Reglas -->
+                  <div class="group">
+                    <label for="liveCells">Celulas vivas:</label>
+                    <input class="info" size="3" type="text" id="liveCells" value="0" disabled>
+                  </div>
+
+                  <!-- Reglas -->
+                  <div class="group" style="margin-left: 10px;">
+                    <label for="iteracion">Iteracion:</label>
+                    <input class="info" size="3" type="text" id="iteracion" value="0" disabled>
+                  </div>
+                </div>
             </div>
-            <div class="header-right">
+            <div class="header-right" style="margin-bottom: 10px;">
         
               <!-- Control de archivo -->
               <div class="group">
@@ -45,15 +58,15 @@
               <!-- Reglas -->
               <div class="group">
                 <label for="rule">Regla B/S:</label>
-                <input type="text" id="rule" value="B3/S23" disabled>
+                <input type="text" id="rule" value="B3/S23">
               </div>
         
               <!-- Borde -->
               <div class="group">
-                <label for="boundary">Borde:</label>
-                <select id="boundary" disabled>
-                  <option value="null">Nulo</option>
-                  <option value="torus">Toro</option>
+                <label for="frontera">Borde:</label>
+                <select id="frontera">
+                  <option value="nulo">Nulo</option>
+                  <option value="toro">Toro</option>
                 </select>
               </div>
         
