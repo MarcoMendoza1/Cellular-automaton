@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Sprite, Texture,Rectangle } from "pixi.js";
 import { Viewport } from 'pixi-viewport'
+import {Decimal} from 'decimal.js';
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  Variables globales
@@ -7,18 +8,28 @@ import { Viewport } from 'pixi-viewport'
 const CELL_SIZE = 10;
 
 let root = document.getElementById("simulador");
+let header = document.getElementById("header");
+let vivas = document.getElementById("liveCells");
+let iteracion = document.getElementById("iteracion");
+
 let simulador;
 let grid;
-let cells;
 let conCells;
-let btnCells;
+let conGrid;
+let contorno;
+
 let tam;
 let col=0xFFFFFF;
+let cv = 0;
 
 // Iteraciones de la cuadricula, indicador del paso actual
-let history=[];
 let ind = 0;
+let liveCells = new Map();
+let arrayCells = [];
+let modo = "nulo";
 
+let reglaB = new Set();
+let reglaS = new Set();
 
 let cellGraph = new Graphics()
                   .setFillStyle({ color: 'white',alpha:.4 })
@@ -30,12 +41,51 @@ let cellContext;
 // Textura de las celulas pre-creada para aumentar eficiencia
 const baseTexture = Texture.WHITE;
 
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 //  Funciones para el simulador (acciones, funcionalidades)
 
+function addCell(cord){
+  cv++;
+  vivas.value = cv;
+  let aux = cord.split(',');
+  let x = aux[0];
+  let y = aux[1];
+
+  let cell = new Sprite(baseTexture);
+
+  cell.x=x * (CELL_SIZE + 1)+1.5;
+  cell.y=y * (CELL_SIZE + 1)+1.5;
+
+  cell.width = 8;
+  cell.height = 8;
+  cell.alpha = .9;
+  cell.tint = (col);
+  cell.visible=true;
+
+  conCells.addChild(cell);
+  liveCells.set(cord,cell);
+}
+
+function removeCell(cord){
+  let cell = liveCells.get(cord);
+  cell.destroy();
+  liveCells.delete(cord);
+
+  cv--;
+  vivas.value = cv;
+}
+
 // onClick de cada celula
-function onTap(){
-  history[history.length-1][this.i][this.j]=cells[this.i][this.j].visible=!cells[this.i][this.j].visible;
+function onTap(cord){
+  // history[history.length-1][this.i][this.j]=cells[this.i][this.j].visible=!cells[this.i][this.j].visible;
+  
+  if(liveCells.has(cord)){
+    removeCell(cord);
+  }else{
+    addCell(cord);
+  }
 }
 
 function buildGrid(graphics, cols, rows){
@@ -55,154 +105,149 @@ function buildGrid(graphics, cols, rows){
   }
   graphics.stroke({ color: 0xffffff, pixelLine: true, width: 1,alpha:.2 });
 
-  // graphics.cacheAsTexture(false);
-  // graphics.cacheAsTexture(true);
 
   return graphics;
 }
 
-function buildCells(conCells,cols,rows){
-  for (let i = 0; i < cells.length; i++) {
-    for (let j = 0; j < cells[i].length; j++) {
-      cells[i][j].destroy();
-      btnCells[i][j].destroy();
-    } 
-  }
-
-  history = [];
-  ind = 0;
-
-  cells = new Array(cols);
-  btnCells = new Array(cols);
-  let act = new Array(cols);
-  for(let i = 0;i<cols;i++){
-    cells[i] = new Array(rows);
-    btnCells[i] = new Array(rows);
-    act[i] = new Array(rows);
-
-    for(let j=0;j<rows;j++){
-      act[i][j] = 0;
-      let cell = new Sprite(baseTexture);
-      let cell2 = new Sprite();
-      cell.alive = 1;
-
-      cell.x=i * (CELL_SIZE + 1)+3;
-      cell.y=j * (CELL_SIZE + 1)+3;
-
-      cell.width = 5;
-      cell.height = 5;
-      cell.alpha = .5;
-      cell2.alpha=0;
-      cell.tint = (col);
-      cell.visible=false;
-
-
-      cell2.cursor='pointer';
-      cell2.eventMode = 'static';
-      
-      cell2.x=cell.x-3;
-      cell2.y=cell.y-3;
-      cell2.width=cell2.height = CELL_SIZE;
-      cell2.i=i;
-      cell2.j=j;
-
-      cell2.on('mousedown',onTap);
-
-      conCells.addChild(cell,cell2);
-      cells[i][j]=cell;
-      btnCells[i][j]=cell2;
-
-    }
-
-  }
-
-  history.push(act);
-
-}
-
-// Aparecer o desaparecer celulas de acuerdo a la iteracion actual
-function actualizarCelulas(){
-  for(let i = 0;i<tam;i++){
-    for(let j=0;j<tam;j++){
-        cells[i][j].visible=history[ind][i][j];
-    }
-  }
-}
-
 // Cambiar color de las celulas
 function cambiarColor(color){
-  for(let i = 0;i<tam;i++){
-    for(let j=0;j<tam;j++){
-        cells[i][j].tint=color;
-    }
-  }
+  liveCells.forEach( (val,key) => {
+    val.tint=color;
+  });
 }
 
 // Generar siguiente iteracion
-function siguienteIteracion(history, tam) {
-  // Obtener la última matriz de la historia (la matriz actual)
-  const matriz = history[history.length - 1];
+function siguienteIteracion(){
+  ind++;
+  iteracion.value = ind;
 
-  let siguienteMatriz = Array.from({ length: tam }, () => Array(tam).fill(0));
+  let newCells = new Set();
 
   // Función para contar los vecinos vivos de una celda
-  function contarVecinosVivos(fila, col) {
-      let contador = 0;
-      // Verificar las 8 direcciones alrededor de la celda (esquinas incluidas)
-      for (let i = -1; i <= 1; i++) {
-          for (let j = -1; j <= 1; j++) {
-              if (i === 0 && j === 0) continue; // No contar la propia celda
-              const nuevaFila = fila + i;
-              const nuevaCol = col + j;
-              if (nuevaFila >= 0 && nuevaFila < tam && nuevaCol >= 0 && nuevaCol < tam) {
-                  if (matriz[nuevaCol][nuevaFila] === true) {
-                      contador++;
-                  }
-              }
-          }
+  function obteneVecinos(cord) {
+    let aux = cord.split(',');
+    let col = parseInt(aux[0]);
+    let fila = parseInt(aux[1]);
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        let nuevaFila = fila + j;
+        let nuevaCol = col + i;
+
+        if(modo == "toro"){
+          if(nuevaCol == -1 ) nuevaCol = tam-1;
+          if(nuevaFila == -1 ) nuevaFila = tam-1;
+
+          if(nuevaCol == tam ) nuevaCol = 0;
+          if(nuevaFila == tam ) nuevaFila = 0;
+        }else if(modo=="nulo"){
+          if(nuevaCol < 0 || nuevaFila < 0 || nuevaCol >= tam || nuevaFila >= tam) continue;
+        }
+
+        const cord = nuevaCol + "," + nuevaFila;
+        
+        if(!newCells.has(cord)){
+          newCells.add(cord);
+        }
       }
-      return contador;
+    }
   }
 
-  // Recorrer cada celda de la matriz actual y calcular su siguiente estado
-  for (let col = 0; col < tam; col++) {
-    for (let fila = 0; fila < tam; fila++) {
-          const vecinosVivos = contarVecinosVivos(fila, col);
-          
-          // Si la celda es viva
-          if (matriz[col][fila] === 1) {
-              // La celda sobrevive si tiene 2 o 3 vecinos vivos
-              if (vecinosVivos === 2 || vecinosVivos === 3) {
-                  siguienteMatriz[col][fila] = true;
-              } else {
-                  siguienteMatriz[col][fila] = false;
-              }
-          } 
-          // Si la celda está muerta
-          else {
-              // La celda revive si tiene exactamente 3 vecinos vivos
-              if (vecinosVivos === 3) {
-                  siguienteMatriz[col][fila] = true;
-              }
-          }
+  //regresa el numero de vecinos vivos de una celula
+  function obteneVecinosVivos(cord) {
+    let aux = cord.split(',');
+    let col = parseInt(aux[0]);
+    let fila = parseInt(aux[1]);
+    let contador = 0;
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        if(i==0 && j==0) continue;
+        let nuevaFila = fila + j;
+        let nuevaCol = col + i;
+
+        if(modo == "toro"){
+          if(nuevaCol == -1 ) nuevaCol = tam-1;
+          if(nuevaFila == -1 ) nuevaFila = tam-1;
+
+          if(nuevaCol == tam ) nuevaCol = 0;
+          if(nuevaFila == tam ) nuevaFila = 0;
+        }
+
+        const cord = nuevaCol + "," + nuevaFila;
+        
+        if(liveCells.has(cord)){
+          contador++;
+        }
       }
+    }
+    return contador;
   }
 
-  history.push(siguienteMatriz);
+  liveCells.forEach( (val,key) => {
+    obteneVecinos(key);
+  });
 
-  ind++;
-  return siguienteMatriz;
+  let newLiveCells = [];
+  let deadCells = [];
+
+  newCells.forEach( (val) => {
+    let cont = obteneVecinosVivos(val);
+    if(liveCells.has(val)){ //celula viva
+      if(!reglaS.has(cont)){ //muere
+        deadCells.push(val);
+      }else{  //vive
+        newLiveCells.push(val);
+      }
+
+    }else{  //muerta
+      if(reglaB.has(cont)){  //vive
+        newLiveCells.push(val);
+      }
+    }
+  });
+
+  deadCells.forEach( (val) => {
+    removeCell(val);
+  });
+
+  newLiveCells.forEach( (val) => {
+    if(!liveCells.has(val)){
+      addCell(val);
+    }
+  });
+  
 }
 
 function reiniciarSimulador(){
-  buildGrid(grid, tam, tam);
-  buildCells(conCells,tam,tam);
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+    console.log("Simulación detenida.");
+  }
 
-  simulador.x=root.clientWidth/2;
-  simulador.y=root.clientHeight/2;
-  
-  simulador.pivot.x= simulador.width/2;
-  simulador.pivot.y= simulador.height/2;
+  ind = 0;
+  cv = 0;
+
+  iteracion.value = ind;
+  vivas.value = cv;
+
+  buildGrid(grid, tam, tam);
+
+  liveCells.forEach( (val,key) => {
+    val.destroy();
+  });
+  liveCells.clear();
+
+  contorno.clear();  
+
+  simulador.x=root.clientWidth/2 - conGrid.width/2;
+  simulador.y=root.clientHeight/2 - conGrid.height/2;
+
+  contorno.rect(0,0,(CELL_SIZE + 1)*tam - .01,(CELL_SIZE + 1)*tam - .01)
+          .stroke({ color: "red", pixelLine: true, width: 1 })
+          .fill({ color: "red", pixelLine: true, width: 1,alpha:.05 });;
+
+  simulador.hitArea = new Rectangle(0, 0, conGrid.width,conGrid.height);
+
 }
 
 
@@ -210,63 +255,84 @@ function reiniciarSimulador(){
 //  Inicializacion del simulador
 
 (async () => {
-    const app = new Application();
-    globalThis.__PIXI_APP__ = app;
+  tam = 100;
 
-    await app.init({ resizeTo: root, preference:"webgpu" });
-    app.ticker.maxFPS = 20;
-    app.ticker.minFPS = 1;
+  reglaB.add(3);
+  reglaS.add(2);
+  reglaS.add(3);
 
-    // create viewport
-  const viewport = new Viewport({
-    screenWidth: app.canvas.width,
-    screenHeight: app.canvas.height,
-    worldWidth: 1000,
-    worldHeight: 1000,
-    stopPropagation:true,
-    passiveWheel:false,
-    events: app.renderer.events, // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
-  });
+  const app = new Application();
+  globalThis.__PIXI_APP__ = app;
 
-// add the viewport to the stage
-app.stage.addChild(viewport);
-
-// activate plugins
-viewport.drag().wheel();
+  await app.init({ resizeTo: root, preference:"webgpu" });
+  app.ticker.maxFPS = 45;
+  app.ticker.minFPS = 1;
 
   simulador = new Container();
-  let gridContainer = new Container({isRenderGroup:true});
-  tam = 100;
-  grid = buildGrid(new Graphics(),100,100);
-  gridContainer.addChild(grid);
-  grid.eventMode = "static";
+  conGrid = new Container({isRenderGroup:true});
+  grid = buildGrid(new Graphics(),tam,tam);
   grid.hitArea = new Rectangle(0, 0, grid.width,grid.height);
-  grid.on("pointerdown",(event)=>{
-    let local = grid.toLocal(event);
-    console.log(local.x,local.y);
+
+  contorno = new Graphics().rect(0,0,(CELL_SIZE + 1)*tam - .01,(CELL_SIZE + 1)*tam - .01)
+                           .stroke({ color: "red", pixelLine: true, width: 1 })
+                           .fill({ color: "red", pixelLine: true, width: 1,alpha:.05 });
+
+
+  conGrid.addChild(grid,contorno);
+
+  simulador.addChild(conGrid);
+  simulador.eventMode = "static";
+  simulador.hitArea = new Rectangle(0, 0, conGrid.width,conGrid.height);
+  simulador.on("pointertap",(event)=>{
+      
+      let x=( (event.x-viewport.x)/viewport.scale.x) - simulador.x;
+      let y=( (event.y-header.clientHeight -viewport.y)/viewport.scale.y) - simulador.y;
+
+      let i = Math.floor(x/(CELL_SIZE + 1));
+      let j = Math.floor(y/(CELL_SIZE + 1));
+
+      onTap(i + "," + j);
+
+      console.log(x,y);
+      console.log(i, j);
+
   });
-  
 
-  simulador.addChild(gridContainer);
-  viewport.addChild|(simulador);
-
-  simulador.x=root.clientWidth/2;
-  simulador.y=root.clientHeight/2;
-
-  simulador.pivot.x= simulador.width/2;
-  simulador.pivot.y= simulador.height/2;
-
+  simulador.x=root.clientWidth/2 - conGrid.width/2;
+  simulador.y=root.clientHeight/2 - conGrid.height/2;
   
   conCells = new Container();
+  conCells.interactiveChildren = false;
   simulador.addChild(conCells);
 
   cellContext = app.renderer.generateTexture(cellGraph);
 
-  cells = [];
-  buildCells(conCells,100,100);
+  // create viewport
+  const viewport = new Viewport({
+    // screenWidth: app.canvas.width,
+    // screenHeight: app.canvas.height,
+    // worldWidth: 1000,
+    // worldHeight: 1000,
+    stopPropagation:true,
+    passiveWheel:false,
+    events: app.renderer.events, // the interaction module is important for wheel to work properly when renderer.view is placed or scaled
+  });
+  
+  // activate plugins
+  viewport.drag().wheel();
 
-// add a red box
+  viewport.on("zoomed-end", () => {
+    if(viewport.scale.x < 0.70){
+      grid.renderable  = false;
+    }else{
+      grid.renderable  = true;
+    }
+  });
+
+  // add a red box
   viewport.addChild(simulador);
+  // add the viewport to the stage
+  app.stage.addChild(viewport);
 
   root.appendChild(app.canvas);
 })();
@@ -296,7 +362,7 @@ document.getElementById("stepBtn").addEventListener("click", function() {
   console.log("Iteración paso a paso ejecutada.");
   siguienteIteracion(history,tam);
   
-  actualizarCelulas();
+  //actualizarCelulas();
 
 });
 
@@ -308,15 +374,14 @@ document.getElementById("playBtn").addEventListener("click", function() {
   if (!intervalId) { // Si no se está ejecutando ya
     intervalId = setInterval(() => {
       siguienteIteracion(history,tam);
-      actualizarCelulas();
-    }, 200); // 200 ms por generación
+    }, 20); // 200 ms por generación
     console.log("Simulación iniciada.");
   }
 });
 
 // Detener simulación
 document.getElementById("stopBtn").addEventListener("click", function() {
-  console.log("⏹Simulación detenida.");
+  console.log("Simulación detenida.");
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
@@ -333,6 +398,33 @@ document.getElementById("clearBtn").addEventListener("click", function() {
 // Guardar configuración
 document.getElementById("saveBtn").addEventListener("click", function() {
   console.log("Guardando configuración.");
+});
+
+// Cambiar modo de frontera
+document.getElementById("frontera").addEventListener("change", function() {
+  modo = this.value;
+  console.log(modo);
+});
+
+// Cambiar regla
+document.getElementById("rule").addEventListener("change", function() {
+  let aux = this.value.split('/');
+  aux[0] = aux[0].substring(1);
+  aux[1] = aux[1].substring(1);
+
+  console.log(aux);
+
+  reglaB.clear();
+  reglaS.clear();
+
+  for(let i = 0;i<aux[0].length;i++){
+    reglaB.add(parseInt(aux[0][i]));
+  }
+
+  for(let i = 0;i<aux[1].length;i++){
+    reglaS.add(parseInt(aux[1][i]));
+  }
+
 });
 
 // Cargar archivo
